@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">GANUS</string>
+    <string name="login_title">Inicia sesión</string>
+    <string name="login_subtitle">Ingresa tus datos para continuar</string>
+    <string name="email_label">Correo electrónico</string>
+    <string name="email_hint">nombre@correo.com</string>
+    <string name="password_label">Contraseña</string>
+    <string name="password_hint">Ingresa tu contraseña</string>
+    <string name="show_password">Mostrar contraseña</string>
+    <string name="hide_password">Ocultar contraseña</string>
+    <string name="login_action">Iniciar sesión</string>
+    <string name="security_note">Tu información está protegida</string>
+    <string name="invalid_email">Ingresa un correo electrónico válido</string>
+    <string name="empty_password">Ingresa tu contraseña</string>
+    <string name="authentication_unavailable">El acceso aún no está conectado al servicio de autenticación.</string>
+    <string name="explore_preview">Explorar pantallas (vista previa)</string>
+</resources>

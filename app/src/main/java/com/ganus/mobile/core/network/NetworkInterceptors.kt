@@ -46,14 +46,14 @@ class SafeRetryInterceptor(
 
         var retries = 0
         while (true) {
-            if (chain.call().isCanceled) {
+            if (chain.call().isCanceled()) {
                 throw IOException("HTTP call was cancelled")
             }
 
             val response = try {
                 chain.proceed(request)
             } catch (exception: IOException) {
-                if (retries >= maxRetries || chain.call().isCanceled) {
+                if (retries >= maxRetries || chain.call().isCanceled()) {
                     throw exception
                 }
                 waitBeforeRetry(chain, exponentialDelay(retries))
@@ -91,7 +91,7 @@ class SafeRetryInterceptor(
     }
 
     private fun waitBeforeRetry(chain: Interceptor.Chain, delayMs: Long) {
-        if (chain.call().isCanceled) {
+        if (chain.call().isCanceled()) {
             throw IOException("HTTP call was cancelled")
         }
         try {

@@ -5,6 +5,7 @@ import com.ganus.mobile.core.network.AccessTokenProvider
 import com.ganus.mobile.core.network.AndroidNetworkConnectivityObserver
 import com.ganus.mobile.core.network.BearerTokenInterceptor
 import com.ganus.mobile.core.network.DefaultHeadersInterceptor
+import com.ganus.mobile.core.network.GanusApi
 import com.ganus.mobile.core.network.InMemoryAccessTokenProvider
 import com.ganus.mobile.core.network.NetworkConnectivityObserver
 import com.ganus.mobile.core.network.SafeRetryInterceptor
@@ -16,6 +17,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import javax.inject.Named
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -60,6 +62,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("storageUploadClient")
+    fun provideStorageUploadClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(90, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+
+    @Provides
+    @Singleton
     fun provideRetrofit(
         client: OkHttpClient,
         json: Json,
@@ -83,6 +96,11 @@ object NetworkModule {
     @Singleton
     fun providePostsApi(retrofit: Retrofit): PostsApi =
         retrofit.create(PostsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGanusApi(retrofit: Retrofit): GanusApi =
+        retrofit.create(GanusApi::class.java)
 }
 
 @Module

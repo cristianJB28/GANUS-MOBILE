@@ -20,6 +20,7 @@ app/src/main/java/com/ganus/mobile/
 - Java 17 y Android SDK 35.
 - El manifiesto permite Internet/estado de red y desactiva trafico cleartext.
 - Configura `API_BASE_URL` en `gradle.properties` o en `~/.gradle/gradle.properties`; debe ser una URL HTTPS que termine en `/`. No guardes secretos en Gradle.
+- La compilación `debug` usa la firma de depuración de Android y no es una versión de distribución confiable para usuarios. Para generar una versión `release` firmada, proporciona `GANUS_RELEASE_STORE_FILE`, `GANUS_RELEASE_STORE_PASSWORD`, `GANUS_RELEASE_KEY_ALIAS` y `GANUS_RELEASE_KEY_PASSWORD` como variables de entorno protegidas y compila `:app:assembleRelease`. No guardes el almacén de claves ni sus contraseñas en el repositorio. Para reducir advertencias de instalación en usuarios, distribuye mediante Google Play con Play App Signing; la firma por sí sola no garantiza que Play Protect deje de mostrar avisos para instalaciones laterales o aplicaciones sin reputación.
 - El cliente usa timeouts finitos, JSON tolerante a campos desconocidos, cabecera `Accept` y autenticacion Bearer.
 - Los reintentos tienen un limite y solo se aplican a `GET`, `HEAD` y `OPTIONS` para errores transitorios. Las solicitudes no idempotentes nunca se reintentan por este interceptor.
 - `InMemoryAccessTokenProvider` conserva el token solo en memoria. Conectalo a tu flujo de inicio de sesion; si necesitas persistencia, usa un almacen cifrado respaldado por Android Keystore.
@@ -35,3 +36,15 @@ Los repositorios convierten respuestas y fallos mediante `safeApiCall`. La cance
 ## Pruebas
 
 `SafeRetryInterceptorTest` verifica que un fallo temporal puede reintentar un `GET` y que un `POST` no se reintenta.
+
+## Base de datos local
+
+La base SQLite local con Room está implementada en `app/src/main/java/com/ganus/mobile/core/local/`. La vista previa mantiene vacas, tareas/respuestas, alertas/evidencias y ordeños localmente; las tareas asignadas desde staging también se guardan en Room para trabajar con sus formularios dinámicos. El esquema y la guía están en [docs/base-datos-local.md](./docs/base-datos-local.md), junto con un [diagrama visual](./docs/diagrama-base-datos.svg).
+
+La pantalla **Tareas diarias** incluye ejemplos offline de formularios dinámicos de inspección de vacas, actividad de finca y mantenimiento de equipo. El contrato JSON recomendado para entregar al equipo de staging está en [docs/contrato-staging-formularios.md](./docs/contrato-staging-formularios.md).
+
+## Interfaz inicial
+
+La actividad principal muestra la pantalla de acceso en `app/src/main/res/layout/activity_main.xml`, con el logotipo GM, correo, contraseña y seguridad. El logotipo también aparece en la barra superior del inicio y como icono de la aplicación instalada. La contraseña se puede mostrar u ocultar y el formulario valida el correo y la contraseña. El login usa `POST /api/v1/auth/login`; luego descarga las tareas asignadas con `GET /api/v1/tasks` y las vacas activas registradas por cuentas ADMIN con `GET /api/v1/cows`. Si staging no tiene vacas activas, la app deja vacía la selección de ordeño. El botón **Sincronizar** vuelve a descargar tareas y vacas. Las respuestas y evidencias de una tarea remota se guardan primero en Room. Al sincronizar la tarea, los archivos se suben al bucket privado de Supabase Storage con una URL firmada, su metadata se registra en PostgreSQL y las respuestas de campos IMAGE/FILE incluyen el identificador remoto del adjunto.
+
+La opción **Explorar pantallas (vista previa)** abre `JourneyActivity`, que contiene pantallas independientes para inicio de jornada, selección e identificación de vaca, registro de litros, información adicional, lista de tareas, historial, cuenta, detalle y resumen de tarea. Los datos de demostración se almacenan en Room solo para la vista previa. En una sesión autenticada, el historial y los registros locales se filtran por el usuario conectado. La pantalla Cuenta muestra el usuario de la vista previa, su rol de operador y permite volver a la pantalla de acceso. El botón **Alerta** guarda título, prioridad, descripción y metadatos de la evidencia localmente; los registros de ordeño también permanecen en el teléfono. Si falla la carga, los archivos y respuestas permanecen en el teléfono para reintentar al guardar de nuevo la tarea; las tareas completadas ofrecen **Reintentar sincronización**. La carga de evidencias está limitada a 10 MiB por archivo. El registro de litros inicia en cero para cada vaca seleccionada, los filtros leen el estado persistido de las tareas y las pantallas respetan las áreas de estado y navegación del teléfono. El escaneo de tags todavía requiere integración.
