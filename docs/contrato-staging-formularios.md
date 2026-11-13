@@ -1,6 +1,6 @@
 # Contrato recomendado para formularios dinámicos de staging
 
-La app todavía no está conectada a staging. Mientras se define el backend, hay tres plantillas de demostración disponibles offline en **Tareas diarias**: inspección de vacas, actividad de finca y mantenimiento de equipo. Sus payloads JSON están en `EjemplosPlantillas.kt` y se convierten en filas de `plantillas_tarea` y `campos_tarea` al iniciar la app.
+Esta es una propuesta para publicar formularios dinámicos, no el contrato de sincronización del servidor. La app descarga tareas y vacas de GANUS Operativo y puede representar los formularios incluidos en ellas; las rutas implementadas se describen en [el contrato de la API](./api-ganus-operativo.md). La envoltura de eventos, el cursor y las rutas de publicación descritas en este documento no están implementados por esta app. También hay tres plantillas de demostración disponibles offline en **Tareas diarias**: inspección de vacas, actividad de finca y mantenimiento de equipo. Sus payloads JSON están en `EjemplosPlantillas.kt` y se convierten en filas de `plantillas_tarea` y `campos_tarea`.
 
 ## Publicar una plantilla
 

@@ -61,6 +61,16 @@ class RepositorioLocalGanus @Inject constructor(
         )
     }
 
+    suspend fun obtenerOrdeniosPendientesDeSincronizacion(): List<RegistroOrdenio> =
+        registrosOrdenioDao.obtenerPendientesDeSincronizacion()
+
+    suspend fun obtenerEvidenciasOrdenio(identificadorOrdenio: String): List<Adjunto> =
+        adjuntosDao.obtenerDelPropietario("ORDENIO", identificadorOrdenio)
+
+    suspend fun marcarOrdenioSincronizado(identificadorLocal: String, identificadorRemoto: String) {
+        registrosOrdenioDao.marcarSincronizado(identificadorLocal, identificadorRemoto)
+    }
+
     suspend fun inicializarDatosDemostracion() {
         baseDatos.withTransaction {
             val ahora = System.currentTimeMillis()

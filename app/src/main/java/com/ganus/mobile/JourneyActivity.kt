@@ -57,9 +57,13 @@ import com.ganus.mobile.core.network.AttachmentUploadUrlRequest
 import com.ganus.mobile.core.network.AlertAttachmentUploadUrlRequest
 import com.ganus.mobile.core.network.ConfirmAlertAttachmentRequest
 import com.ganus.mobile.core.network.CreateAlertRequest
+import com.ganus.mobile.core.network.CreateMilkingRequest
+import com.ganus.mobile.core.network.mensajeParaUsuario
 import com.ganus.mobile.core.network.ConfirmAttachmentRequest
 import com.ganus.mobile.core.network.GanusApi
+import com.ganus.mobile.core.network.PersistentAccessTokenProvider
 import com.ganus.mobile.core.network.SaveTaskResponsesRequest
+import com.ganus.mobile.core.network.uuidOrNull
 import com.ganus.mobile.core.network.descargarTodasLasTareas
 import com.ganus.mobile.core.network.descargarTodasLasVacas
 import com.ganus.mobile.core.local.RepositorioLocalGanus.EvidenciaSeleccionada
@@ -140,6 +144,9 @@ class JourneyActivity : ComponentActivity() {
 
     @Inject
     lateinit var ganusApi: GanusApi
+
+    @Inject
+    lateinit var accessTokenProvider: PersistentAccessTokenProvider
 
     @Inject
     @Named("storageUploadClient")
@@ -994,9 +1001,10 @@ class JourneyActivity : ComponentActivity() {
                 repositorioLocal.guardarTareasRemotas(tareas)
                 repositorioLocal.guardarVacasRemotas(vacas)
                 val alertasSincronizadas = sincronizarAlertasPendientes()
+                val ordeniosSincronizados = sincronizarOrdeniosPendientes()
                 Toast.makeText(
                     this@JourneyActivity,
-                    "Datos sincronizados con staging. Alertas sincronizadas: $alertasSincronizadas.",
+                    "Datos sincronizados. Alertas: $alertasSincronizadas · Ordeños: $ordeniosSincronizados.",
                     Toast.LENGTH_LONG,
                 ).show()
             } catch (exception: CancellationException) {
@@ -1004,7 +1012,7 @@ class JourneyActivity : ComponentActivity() {
             } catch (exception: Exception) {
                 Toast.makeText(
                     this@JourneyActivity,
-                    "No se pudo sincronizar: ${exception.localizedMessage ?: "verifica tu conexión"}",
+                    "No se pudo sincronizar: ${exception.mensajeParaUsuario("verifica tu conexión")}",
                     Toast.LENGTH_LONG,
                 ).show()
             } finally {
@@ -1025,6 +1033,7 @@ class JourneyActivity : ComponentActivity() {
                         titulo = alerta.titulo,
                         descripcion = alerta.descripcion,
                         prioridad = alerta.prioridad,
+                        creadaEn = isoUtc(alerta.creadaEn),
                     ),
                 )
                 repositorioLocal.marcarAlertaSincronizada(
@@ -1065,6 +1074,75 @@ class JourneyActivity : ComponentActivity() {
                 }
         }
         return alertas.size
+    }
+
+    /** Hora en ISO 8601 UTC, como la pide la API (java.time exige Android 8; la app admite Android 7). */
+    private fun isoUtc(milisegundos: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            .format(java.util.Date(milisegundos))
+
+    /**
+     * Envía los ordeños que el servidor no tiene y sus archivos. El id del registro es el UUID del teléfono, así
+     * que un reintento no duplica. Se omiten los de la vista previa (vacas que no existen en el servidor).
+     */
+    private suspend fun sincronizarOrdeniosPendientes(): Int {
+        var enviados = 0
+        repositorioLocal.obtenerOrdeniosPendientesDeSincronizacion().forEach { registro ->
+            val idVaca = registro.identificadorVaca.removePrefix("remote-").uuidOrNull() ?: return@forEach
+            if (registro.identificadorRemoto == null) {
+                val idTarea = registro.identificadorTareaOrdenio
+                    ?.let { repositorioLocal.obtenerTareaLocal(it)?.identificadorRemoto }
+                    .uuidOrNull()
+                ganusApi.createMilking(
+                    CreateMilkingRequest(
+                        milkingId = registro.identificadorLocal,
+                        cowId = idVaca,
+                        taskId = idTarea,
+                        litros = registro.litros,
+                        alimentacion = registro.alimentacion,
+                        estadoSalud = registro.estadoSalud,
+                        clima = registro.clima,
+                        turno = registro.turno,
+                        observaciones = registro.observaciones,
+                        registradoEn = isoUtc(registro.creadoEn),
+                    ),
+                )
+                repositorioLocal.marcarOrdenioSincronizado(registro.identificadorLocal, registro.identificadorLocal)
+                enviados++
+            }
+            repositorioLocal.obtenerEvidenciasOrdenio(registro.identificadorLocal)
+                .filter { it.estadoCarga != "SINCRONIZADO" }
+                .forEach { evidencia ->
+                    val bytes = leerBytesAdjunto(evidencia)
+                    val mimeType = evidencia.tipoMime ?: "application/octet-stream"
+                    val upload = ganusApi.createMilkingAttachmentUploadUrl(
+                        milkingId = registro.identificadorLocal,
+                        request = AlertAttachmentUploadUrlRequest(
+                            attachmentId = evidencia.identificadorLocal,
+                            fileName = evidencia.nombreArchivo,
+                            mimeType = mimeType,
+                            sizeBytes = bytes.size.toLong(),
+                        ),
+                    ).data
+                    subirArchivoFirmado(upload.uploadUrl, upload.headers, mimeType, bytes, evidencia.nombreArchivo)
+                    ganusApi.confirmMilkingAttachment(
+                        milkingId = registro.identificadorLocal,
+                        request = ConfirmAlertAttachmentRequest(
+                            attachmentId = upload.attachmentId,
+                            storagePath = upload.storagePath,
+                            fileName = evidencia.nombreArchivo,
+                            mimeType = mimeType,
+                            sizeBytes = bytes.size.toLong(),
+                        ),
+                    )
+                    repositorioLocal.marcarEvidenciaSincronizada(
+                        identificadorLocal = evidencia.identificadorLocal,
+                        identificadorRemoto = upload.attachmentId,
+                    )
+                }
+        }
+        return enviados
     }
 
     private suspend fun leerBytesAdjunto(evidencia: Adjunto): ByteArray = withContext(Dispatchers.IO) {
@@ -1525,6 +1603,8 @@ class JourneyActivity : ComponentActivity() {
                 val remoteTaskId = tareaLocal?.identificadorRemoto
                 if (remoteTaskId != null) {
                     try {
+                        // Una tarea de ordeño se termina cuando el servidor tiene el ordeño de todas sus vacas
+                        if (farmTasks[taskIndex].type == "ORDENIO") sincronizarOrdeniosPendientes()
                         val uploadedAttachments = sincronizarEvidenciasTarea(
                             localTaskId = localTaskId,
                             remoteTaskId = remoteTaskId,
@@ -1533,6 +1613,7 @@ class JourneyActivity : ComponentActivity() {
                             taskId = remoteTaskId,
                             request = SaveTaskResponsesRequest(
                                 identificadorEvento = java.util.UUID.randomUUID().toString(),
+                                capturadoEn = isoUtc(System.currentTimeMillis()),
                                 estado = estado.uppercase().replace(' ', '_'),
                                 respuestas = respuestas.mapNotNull { (key, value) ->
                                     value.takeIf(String::isNotBlank)?.let {
@@ -1553,7 +1634,7 @@ class JourneyActivity : ComponentActivity() {
                     } catch (syncException: Exception) {
                         Toast.makeText(
                             this@JourneyActivity,
-                            "Tarea guardada en el teléfono; no se pudo sincronizar: ${syncException.localizedMessage ?: "sin conexión"}",
+                            "Tarea guardada en el teléfono; no se pudo sincronizar: ${syncException.mensajeParaUsuario("sin conexión")}",
                             Toast.LENGTH_LONG,
                         ).show()
                         return@launch
@@ -2165,7 +2246,7 @@ class JourneyActivity : ComponentActivity() {
                     .setMessage("¿Quieres salir de esta sesión?")
                     .setNegativeButton("Cancelar", null)
                     .setPositiveButton("Cerrar sesión") { _, _ ->
-                        currentUser = "Usuario de demostración"
+                        accessTokenProvider.clearSession()
                         finish()
                     }
                     .show()
@@ -2174,7 +2255,11 @@ class JourneyActivity : ComponentActivity() {
         )
         content.addView(
             centered(
-                "La autenticación aún no está conectada; estos datos corresponden a la vista previa.",
+                if (currentUserId == null) {
+                    "Estos datos corresponden a la vista previa."
+                } else {
+                    "La sesión permanecerá activa en este dispositivo hasta que cierres sesión manualmente."
+                },
                 12,
                 getColor(R.color.text_secondary),
             ),

@@ -16,9 +16,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.ganus.mobile.core.local.RepositorioLocalGanus
+import com.ganus.mobile.core.network.AuthenticatedSession
 import com.ganus.mobile.core.network.GanusApi
-import com.ganus.mobile.core.network.InMemoryAccessTokenProvider
 import com.ganus.mobile.core.network.LoginRequest
+import com.ganus.mobile.core.network.PersistentAccessTokenProvider
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
     lateinit var ganusApi: GanusApi
 
     @Inject
-    lateinit var accessTokenProvider: InMemoryAccessTokenProvider
+    lateinit var accessTokenProvider: PersistentAccessTokenProvider
 
     @Inject
     lateinit var repositorioLocal: RepositorioLocalGanus
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         GanusApplication.permitirCaptura(this)
+        accessTokenProvider.getSession()?.let(::abrirJornada)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -109,7 +111,12 @@ class MainActivity : ComponentActivity() {
                 lifecycleScope.launch {
                     try {
                         val session = ganusApi.login(LoginRequest(email, password))
-                        accessTokenProvider.setAccessToken(session.accessToken)
+                        val authenticatedSession = AuthenticatedSession(
+                            accessToken = session.accessToken,
+                            userId = session.usuario.identificador,
+                            userName = session.usuario.nombre,
+                        )
+                        accessTokenProvider.saveSession(authenticatedSession)
                         val syncError = try {
                             repositorioLocal.guardarTareasRemotas(ganusApi.getTasks().data)
                             repositorioLocal.guardarVacasRemotas(ganusApi.getCows().data)
@@ -119,12 +126,7 @@ class MainActivity : ComponentActivity() {
                         } catch (exception: Exception) {
                             exception
                         }
-                        startActivity(
-                            Intent(this@MainActivity, JourneyActivity::class.java)
-                                .putExtra(JourneyActivity.EXTRA_CURRENT_USER, session.usuario.nombre)
-                                .putExtra(JourneyActivity.EXTRA_CURRENT_USER_ID, session.usuario.identificador)
-                                .putExtra(JourneyActivity.EXTRA_AUTHENTICATED, true),
-                        )
+                        abrirJornada(authenticatedSession)
                         syncError?.let {
                             Toast.makeText(
                                 this@MainActivity,
@@ -135,7 +137,6 @@ class MainActivity : ComponentActivity() {
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
-                        accessTokenProvider.clearAccessToken()
                         val message = when (exception) {
                             is retrofit2.HttpException -> when (exception.code()) {
                                 401 -> "Correo o contraseña incorrectos."
@@ -148,6 +149,7 @@ class MainActivity : ComponentActivity() {
                         loginButton.isEnabled = true
                     }
                 }
+
             }
         }
 
@@ -161,5 +163,14 @@ class MainActivity : ComponentActivity() {
                 .putExtra(JourneyActivity.EXTRA_AUTHENTICATED, false),
             )
         }
+    }
+
+    private fun abrirJornada(session: AuthenticatedSession) {
+        startActivity(
+            Intent(this, JourneyActivity::class.java)
+                .putExtra(JourneyActivity.EXTRA_CURRENT_USER, session.userName)
+                .putExtra(JourneyActivity.EXTRA_CURRENT_USER_ID, session.userId)
+                .putExtra(JourneyActivity.EXTRA_AUTHENTICATED, true),
+        )
     }
 }

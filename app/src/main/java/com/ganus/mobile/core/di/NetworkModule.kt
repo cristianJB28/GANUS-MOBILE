@@ -6,8 +6,8 @@ import com.ganus.mobile.core.network.AndroidNetworkConnectivityObserver
 import com.ganus.mobile.core.network.BearerTokenInterceptor
 import com.ganus.mobile.core.network.DefaultHeadersInterceptor
 import com.ganus.mobile.core.network.GanusApi
-import com.ganus.mobile.core.network.InMemoryAccessTokenProvider
 import com.ganus.mobile.core.network.NetworkConnectivityObserver
+import com.ganus.mobile.core.network.PersistentAccessTokenProvider
 import com.ganus.mobile.core.network.SafeRetryInterceptor
 import com.ganus.mobile.feature.posts.data.PostsApi
 import dagger.Binds
@@ -30,7 +30,7 @@ abstract class NetworkBindingsModule {
     @Binds
     @Singleton
     abstract fun bindAccessTokenProvider(
-        implementation: InMemoryAccessTokenProvider,
+        implementation: PersistentAccessTokenProvider,
     ): AccessTokenProvider
 }
 

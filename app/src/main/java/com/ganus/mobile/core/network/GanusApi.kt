@@ -37,6 +37,23 @@ interface GanusApi {
         @Body request: CreateAlertRequest,
     ): CreateAlertResponse
 
+    @POST("milkings")
+    suspend fun createMilking(
+        @Body request: CreateMilkingRequest,
+    ): CreateMilkingResponse
+
+    @POST("milkings/{milkingId}/attachments/upload-url")
+    suspend fun createMilkingAttachmentUploadUrl(
+        @Path("milkingId") milkingId: String,
+        @Body request: AlertAttachmentUploadUrlRequest,
+    ): AttachmentUploadUrlResponse
+
+    @POST("milkings/{milkingId}/attachments/confirm")
+    suspend fun confirmMilkingAttachment(
+        @Path("milkingId") milkingId: String,
+        @Body request: ConfirmAlertAttachmentRequest,
+    )
+
     @POST("alerts/{alertId}/attachments/upload-url")
     suspend fun createAlertAttachmentUploadUrl(
         @Path("alertId") alertId: String,
@@ -59,6 +76,11 @@ interface GanusApi {
         @Body request: ConfirmAttachmentRequest,
     )
 }
+
+private val uuidPattern = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+internal fun String?.uuidOrNull(): String? =
+    this?.takeIf(uuidPattern::matches)
 
 @Serializable
 data class LoginRequest(
@@ -128,6 +150,9 @@ data class SaveTaskResponsesRequest(
     val identificadorEvento: String,
     val estado: String,
     val respuestas: Map<String, JsonElement>,
+    /** Hora real en que se hizo en el teléfono (ISO 8601 en UTC). Sin ella, el servidor usa la hora en que recibe. */
+    @SerialName("capturado_en")
+    val capturadoEn: String? = null,
 )
 
 @Serializable
@@ -137,6 +162,42 @@ data class CreateAlertRequest(
     val titulo: String,
     val descripcion: String,
     val prioridad: String,
+    @SerialName("creada_en")
+    val creadaEn: String? = null,
+)
+
+/** Ordeño de una vaca. El id lo genera el teléfono (UUID): reenviarlo no duplica el registro. */
+@Serializable
+data class CreateMilkingRequest(
+    @SerialName("identificador_remoto")
+    val milkingId: String,
+    @SerialName("identificador_vaca")
+    val cowId: String,
+    @SerialName("identificador_tarea")
+    val taskId: String? = null,
+    val litros: Double,
+    val alimentacion: String? = null,
+    @SerialName("estado_salud")
+    val estadoSalud: String? = null,
+    val clima: String? = null,
+    val turno: String? = null,
+    val observaciones: String? = null,
+    @SerialName("registrado_en")
+    val registradoEn: String? = null,
+)
+
+@Serializable
+data class CreateMilkingResponse(
+    val data: RemoteMilking,
+    val repetido: Boolean = false,
+)
+
+@Serializable
+data class RemoteMilking(
+    @SerialName("identificador_remoto")
+    val milkingId: String,
+    @SerialName("estado_servidor")
+    val estadoServidor: String,
 )
 
 @Serializable

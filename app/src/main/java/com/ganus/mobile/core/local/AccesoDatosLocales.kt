@@ -297,6 +297,32 @@ interface RegistrosOrdenioDao {
         """,
     )
     suspend fun obtenerVacasRegistradasParaTarea(identificadorTarea: String): List<String>
+
+    /** Ordeños hechos con una persona con sesión que el servidor aún no tiene, o con archivos por subir. */
+    @Query(
+        """
+        SELECT * FROM registros_ordenio
+        WHERE identificador_usuario IS NOT NULL
+          AND (identificador_remoto IS NULL
+               OR EXISTS (
+                   SELECT 1 FROM adjuntos
+                   WHERE tipo_propietario = 'ORDENIO'
+                     AND identificador_propietario = registros_ordenio.identificador_local
+                     AND estado_carga != 'SINCRONIZADO'
+               ))
+        ORDER BY creado_en
+        """,
+    )
+    suspend fun obtenerPendientesDeSincronizacion(): List<RegistroOrdenio>
+
+    @Query(
+        """
+        UPDATE registros_ordenio
+        SET identificador_remoto = :identificadorRemoto
+        WHERE identificador_local = :identificadorLocal
+        """,
+    )
+    suspend fun marcarSincronizado(identificadorLocal: String, identificadorRemoto: String)
 }
 
 @Dao
